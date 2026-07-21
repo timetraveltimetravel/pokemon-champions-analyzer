@@ -1,6 +1,6 @@
 import {useEffect, useMemo, useRef, useState} from 'react';
 import {
-  STATS, StatsMon, ThreatRow, analyzeThreats, buildSpeciesList, gen, getSpecies,
+  STATS, StatsMon, CutKey, ThreatRow, analyzeThreats, buildSpeciesList, gen, getSpecies,
   itemKo, abilityKo, makePokemon, speciesKo, toID, learnsetDamagingMoves, LEGAL_ITEMS,
   speedStat, speedFromSpread, defensiveProfile, TYPE_CHART, ALL_TYPES,
   moveTip, abilityTip, itemTip, natureTip, specialNotes,
@@ -266,8 +266,6 @@ const DEFAULT_MY: SideConfig = {nature: 'Serious', sp: [32, 0, 0, 0, 0, 0], abil
 const ZERO_RANKS = {myAtk: 0, mySpa: 0, myDef: 0, mySpd: 0, oppAtk: 0, oppSpa: 0, oppDef: 0, oppSpd: 0};
 const ZERO_SP = [0, 0, 0, 0, 0, 0];
 
-const statsByName = new Map(STATS.pokemon.map((p) => [toID(p.name), p]));
-
 function topSpreadConfig(mon: StatsMon, fallbackAbility: string): SideConfig {
   const [nature, sp] = mon.spreads[0] ?? ['Serious', ZERO_SP];
   const abilId = mon.abilities[0]?.[0];
@@ -305,7 +303,12 @@ const ALL_ITEMS: Option[] = (() => {
 const SCARF_MULT = (item: string, spe: number) => (item === 'choicescarf' ? Math.floor(spe * 1.5) : spe);
 
 export default function App() {
-  const speciesList = useMemo(buildSpeciesList, []);
+  // 통계 기준: 상위권(1760+) / 전체 래더
+  const [cut, setCut] = useState<CutKey>('top');
+  const cutPokemon = STATS.cuts[cut].pokemon;
+  const statsByName = useMemo(() => new Map(cutPokemon.map((p) => [toID(p.name), p])), [cutPokemon]);
+
+  const speciesList = useMemo(() => buildSpeciesList(cutPokemon), [cutPokemon]);
   const allOptions: Option[] = useMemo(
     () => speciesList.map((s) => ({
       value: s.name,
@@ -335,18 +338,18 @@ export default function App() {
   const oppStats = oppName ? statsByName.get(toID(oppName)) : undefined;
   const myStats = myName ? statsByName.get(toID(myName)) : undefined;
 
-  const pickMy = (name: string) => {
+  const pickMy = (name: string, map = statsByName) => {
     setMyName(name);
     const sp = getSpecies(name);
-    const stat = statsByName.get(toID(name));
+    const stat = map.get(toID(name));
     const ability = sp?.abilities[0] ?? '';
     setMy(stat ? topSpreadConfig(stat, ability) : {...DEFAULT_MY, sp: DEFAULT_MY.sp.slice(), ability});
     setMyShowAllMoves(false);
     setRanks({...ZERO_RANKS});
   };
-  const pickOpp = (name: string) => {
+  const pickOpp = (name: string, map = statsByName) => {
     setOppName(name);
-    const stat = statsByName.get(toID(name));
+    const stat = map.get(toID(name));
     const top = stat?.spreads[0];
     setSpreadIdx(stat ? 0 : -1);
     setOppNature(top?.[0] ?? 'Serious');
@@ -364,6 +367,15 @@ export default function App() {
   };
 
   // 상대 가정 스프레드 (통계 선택 또는 직접 입력)
+  // 통계 컷 전환 시 현재 선택된 포켓몬의 가정을 새 컷 기준으로 갱신
+  const switchCut = (c: CutKey) => {
+    if (c === cut) return;
+    setCut(c);
+    const map = new Map(STATS.cuts[c].pokemon.map((p) => [toID(p.name), p]));
+    if (myName) pickMy(myName, map);
+    if (oppName) pickOpp(oppName, map);
+  };
+
   const oppSpread: [string, number[]] = useMemo(() => {
     if (spreadIdx >= 0 && oppStats?.spreads[spreadIdx]) {
       const [n, s] = oppStats.spreads[spreadIdx];
@@ -478,7 +490,17 @@ export default function App() {
           <h1>포켓몬 챔피언스 위협 분석기</h1>
           <button className="guide-btn" onClick={() => setGuideOpen(true)}>📖 가이드</button>
         </div>
-        <p>랭크배틀 싱글 M-B · Smogon {STATS.info.month} ({STATS.info.rating}+ 레이팅, {STATS.info.battles.toLocaleString()}판)</p>
+        <p>
+          랭크배틀 싱글 M-B · Smogon {STATS.info.month} ({STATS.info.battles.toLocaleString()}판) · 통계 기준:{' '}
+          <span className="cut-toggle">
+            <button className={cut === 'top' ? 'on' : ''} onClick={() => switchCut('top')}>
+              상위권 {STATS.cuts.top.rating}+
+            </button>
+            <button className={cut === 'all' ? 'on' : ''} onClick={() => switchCut('all')}>
+              전체 래더
+            </button>
+          </span>
+        </p>
       </header>
       {guideOpen && <Guide onClose={() => setGuideOpen(false)} />}
 

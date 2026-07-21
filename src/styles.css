@@ -59,6 +59,13 @@ details[open] summary { margin-bottom: 8px; }
 }
 .guide-btn:hover { border-color: var(--accent); color: var(--accent); }
 
+.cut-toggle { display: inline-flex; gap: 0; border: 1px solid var(--line); border-radius: 7px; overflow: hidden; vertical-align: middle; }
+.cut-toggle button {
+  padding: 3px 10px; border: none; background: transparent; color: var(--dim);
+  font-size: 0.78rem; cursor: pointer;
+}
+.cut-toggle button.on { background: var(--accent); color: #fff; font-weight: 700; }
+
 .type.sm { padding: 1px 7px; font-size: 0.68rem; }
 .matchups { display: flex; flex-direction: column; gap: 4px; }
 .mu-row { display: flex; align-items: flex-start; gap: 8px; }

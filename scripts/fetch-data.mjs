@@ -19,16 +19,14 @@ const OUT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'src',
 
 const toID = (s) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
 
-async function findLatestStats() {
+async function findLatestMonth() {
   const now = new Date();
   for (let back = 1; back <= 6; back++) {
     const d = new Date(now.getFullYear(), now.getMonth() - back, 1);
     const month = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-    for (const rating of [RATING, '1630', '1500', '0']) {
-      const url = `https://www.smogon.com/stats/${month}/chaos/${FORMAT}-${rating}.json`;
-      const res = await fetch(url, {method: 'HEAD'});
-      if (res.ok) return {url, month, rating};
-    }
+    const url = `https://www.smogon.com/stats/${month}/chaos/${FORMAT}-${RATING}.json`;
+    const res = await fetch(url, {method: 'HEAD'});
+    if (res.ok) return month;
   }
   throw new Error(`${FORMAT} 통계를 찾을 수 없습니다`);
 }
@@ -50,40 +48,50 @@ function parseSpread(key) {
 async function main() {
   fs.mkdirSync(OUT, {recursive: true});
 
-  // 1) Smogon 통계
-  const {url, month, rating} = await findLatestStats();
-  console.log(`통계 다운로드: ${url}`);
-  const chaos = await (await fetch(url)).json();
-
-  const pokemon = [];
-  for (const [name, p] of Object.entries(chaos.data)) {
-    const total = Object.values(p.Abilities).reduce((a, b) => a + b, 0);
-    if (!total || p.usage < 0.001) continue;
-    const spreads = Object.entries(p.Spreads)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 3)
-      .map(([k, v]) => {
-        const [nature, sp] = parseSpread(k);
-        return [nature, sp, Math.round((v / total) * 1000) / 10];
+  // 1) Smogon 통계 — 상위권(기본 1760) 컷과 전체(0) 컷을 함께 수록
+  const month = await findLatestMonth();
+  const processChaos = (chaos) => {
+    const pokemon = [];
+    for (const [name, p] of Object.entries(chaos.data)) {
+      const total = Object.values(p.Abilities).reduce((a, b) => a + b, 0);
+      if (!total || p.usage < 0.001) continue;
+      const spreads = Object.entries(p.Spreads)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 3)
+        .map(([k, v]) => {
+          const [nature, sp] = parseSpread(k);
+          return [nature, sp, Math.round((v / total) * 1000) / 10];
+        });
+      pokemon.push({
+        name,
+        usage: Math.round(p.usage * 10000) / 100,
+        count: p['Raw count'],
+        abilities: topEntries(p.Abilities, 3, total),
+        items: topEntries(p.Items, 6, total),
+        moves: topEntries(p.Moves, 14, total),
+        spreads,
       });
-    pokemon.push({
-      name,
-      usage: Math.round(p.usage * 10000) / 100,
-      count: p['Raw count'],
-      abilities: topEntries(p.Abilities, 3, total),
-      items: topEntries(p.Items, 6, total),
-      moves: topEntries(p.Moves, 14, total),
-      spreads,
-    });
-  }
-  pokemon.sort((a, b) => b.usage - a.usage);
-
-  const stats = {
-    info: {format: FORMAT, month, rating: Number(rating), battles: chaos.info['number of battles']},
-    pokemon,
+    }
+    pokemon.sort((a, b) => b.usage - a.usage);
+    return {battles: chaos.info['number of battles'], pokemon};
   };
+
+  const cuts = {};
+  let battles = 0;
+  for (const [key, rating] of [['top', RATING], ['all', '0']]) {
+    const url = `https://www.smogon.com/stats/${month}/chaos/${FORMAT}-${rating}.json`;
+    console.log(`통계 다운로드: ${url}`);
+    const {battles: b, pokemon} = processChaos(await (await fetch(url)).json());
+    battles = b;
+    cuts[key] = {rating: Number(rating), pokemon};
+    console.log(`  ${key}(${rating}+): ${pokemon.length}종`);
+  }
+
+  const stats = {info: {format: FORMAT, month, battles}, cuts};
   fs.writeFileSync(path.join(OUT, 'stats.json'), JSON.stringify(stats));
-  console.log(`stats.json: ${pokemon.length}종 (${month}, ${rating}+, ${stats.info.battles}판)`);
+  const pokemon = cuts.top.pokemon; // 이하 로스터 보강 등은 상위권 컷 기준 + 전체 컷 합집합
+  const allCutIds = new Set(cuts.all.pokemon.map((p) => toID(p.name)));
+  console.log(`stats.json: 상위권 ${pokemon.length}종 / 전체 ${cuts.all.pokemon.length}종 (${month}, ${battles}판)`);
 
   // 2) 챔피언스 로스터/학습셋 (Showdown 팀빌더 테이블 — 챔피언스 공식 합법 데이터)
   console.log('Showdown 팀빌더 테이블 다운로드...');
@@ -98,6 +106,7 @@ async function main() {
   const roster = champs.tiers.slice(rosterStart).filter((x) => typeof x === 'string');
   const rosterSet = new Set(roster);
   for (const {name} of pokemon) rosterSet.add(toID(name)); // 통계 등장 종은 무조건 포함
+  for (const id of allCutIds) rosterSet.add(id);
   console.log(`챔피언스 로스터: ${rosterSet.size}종`);
   const legalItems = champs.items ? champs.items.filter((x) => typeof x === 'string') : [];
 

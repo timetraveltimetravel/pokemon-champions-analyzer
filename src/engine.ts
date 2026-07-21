@@ -24,11 +24,13 @@ export interface StatsMon {
   moves: [string, number][];
   spreads: [string, number[], number][];
 }
+export interface StatsCut { rating: number; pokemon: StatsMon[] }
 export interface StatsFile {
-  info: {format: string; month: string; rating: number; battles: number};
-  pokemon: StatsMon[];
+  info: {format: string; month: string; battles: number};
+  cuts: {top: StatsCut; all: StatsCut};
 }
 export const STATS = statsJson as unknown as StatsFile;
+export type CutKey = 'top' | 'all';
 
 interface Override {
   name: string;
@@ -135,8 +137,8 @@ export function getSpecies(name: string): SpeciesInfo | undefined {
 }
 
 // 포켓몬 선택 목록: 챔피언스 로스터에 존재하는 종만 (통계 사용률순 → 가나다)
-export function buildSpeciesList(): {name: string; ko: string; usage?: number}[] {
-  const usageMap = new Map(STATS.pokemon.map((p) => [toID(p.name), p.usage]));
+export function buildSpeciesList(statsPokemon: StatsMon[]): {name: string; ko: string; usage?: number}[] {
+  const usageMap = new Map(statsPokemon.map((p) => [toID(p.name), p.usage]));
   const list: {name: string; ko: string; usage?: number}[] = [];
   for (const id of DEXINFO.roster ?? []) {
     if (HIDDEN.has(id) && !usageMap.has(id)) continue;

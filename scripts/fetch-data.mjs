@@ -161,16 +161,20 @@ async function main() {
   // 2.5) 전체 종 특성 목록 + 메가스톤 등 도구 영문 표기 (Showdown pokedex 기반)
   const abilities = {};
   const itemNames = {};
+  const megaStones = {}; // 메가스톤 id → 메가폼 이름
   const hidden = [];
   for (const [id, e] of Object.entries(dex)) {
     if (e.abilities) abilities[id] = Object.values(e.abilities);
-    if (e.requiredItem) itemNames[toID(e.requiredItem)] = e.requiredItem;
+    if (e.requiredItem) {
+      itemNames[toID(e.requiredItem)] = e.requiredItem;
+      if ((e.forme ?? '').includes('Mega')) megaStones[toID(e.requiredItem)] = e.name;
+    }
     if (e.requiredItems) for (const it of e.requiredItems) itemNames[toID(it)] = it;
     // 배틀 중에만 존재하는 폼(따라큐-Busted 등)과 토템 폼은 선택 목록에서 숨김 (메가는 유지)
     if ((e.battleOnly && !e.requiredItem && !e.requiredItems) || (e.forme ?? '').includes('Totem')) hidden.push(id);
   }
   fs.writeFileSync(path.join(OUT, 'dexinfo.json'), JSON.stringify({
-    abilities, itemNames, hidden, roster: [...rosterSet], legalItems,
+    abilities, itemNames, megaStones, hidden, roster: [...rosterSet], legalItems,
   }));
   console.log(`dexinfo.json: 특성 ${Object.keys(abilities).length}종, 도구 표기 ${Object.keys(itemNames).length}개, 숨김 폼 ${hidden.length}종, 합법 도구 ${legalItems.length}개`);
 

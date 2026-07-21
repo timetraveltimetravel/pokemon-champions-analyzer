@@ -8,6 +8,7 @@ import dexinfoJson from './gen/dexinfo.json';
 import learnsetsJson from './gen/learnsets.json';
 import moveOverridesJson from './gen/move-overrides.json';
 import {ABILITY_FX} from './ability-fx';
+import {ITEM_FX} from './item-fx';
 
 export const gen = Generations.get(9);
 
@@ -46,6 +47,7 @@ export const OVERRIDES = overridesJson as unknown as Record<string, Override>;
 const DEXINFO = dexinfoJson as unknown as {
   abilities: Record<string, string[]>;
   itemNames: Record<string, string>;
+  megaStones: Record<string, string>;
   hidden: string[];
   roster: string[];
   legalItems: string[];
@@ -237,7 +239,13 @@ export function abilityTip(name: string): string {
 
 export function itemTip(id: string): string {
   if (!id || id === 'nothing') return '';
-  const desc = KO.itemDesc?.[toID(id)] ?? '';
+  const iid = toID(id);
+  // 수치 기반 효과 설명 우선 → 메가스톤 자동 생성 → 도감 설명 폴백
+  const fx = ITEM_FX[iid];
+  if (fx) return `${itemKo(id)}: ${fx}`;
+  const mega = DEXINFO.megaStones?.[iid];
+  if (mega) return `${itemKo(id)}: 메가스톤 — 지니게 하면 ${speciesKo(mega)}(으)로 메가진화할 수 있다`;
+  const desc = KO.itemDesc?.[iid] ?? '';
   return desc ? `${itemKo(id)}: ${desc}` : itemKo(id);
 }
 

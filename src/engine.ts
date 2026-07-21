@@ -329,17 +329,23 @@ export function learnsetDamagingMoves(name: string): string[] {
 }
 
 // 스핏 실능 (스카프는 ×1.5)
-export function speedStat(name: string, nature: string, spSpe: number, scarf = false): number {
+// 스핏에 영향을 주는 소지품 배율 (구애스카프 ×1.5, 아이언볼 ×0.5)
+export function itemSpeedMult(item: string | undefined, spe: number): number {
+  if (item === 'choicescarf') return Math.floor(spe * 1.5);
+  if (item === 'ironball') return Math.floor(spe * 0.5);
+  return spe;
+}
+export const holdsSpeedItem = (item: string | undefined) => item === 'choicescarf' || item === 'ironball';
+
+export function speedStat(name: string, nature: string, spSpe: number, item?: string): number {
   const sp = [0, 0, 0, 0, 0, spSpe];
   const p = makePokemon(name, {nature, sp});
-  const s = p.stats.spe;
-  return scarf ? Math.floor(s * 1.5) : s;
+  return itemSpeedMult(item, p.stats.spe);
 }
 
-export function speedFromSpread(name: string, nature: string, sp: number[], scarf = false): number {
+export function speedFromSpread(name: string, nature: string, sp: number[], item?: string): number {
   const p = makePokemon(name, {nature, sp});
-  const s = p.stats.spe;
-  return scarf ? Math.floor(s * 1.5) : s;
+  return itemSpeedMult(item, p.stats.spe);
 }
 
 // ---------- 위협 분석 ----------

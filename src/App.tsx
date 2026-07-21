@@ -2,7 +2,7 @@ import {useEffect, useMemo, useRef, useState} from 'react';
 import {
   STATS, StatsMon, CutKey, ThreatRow, analyzeThreats, buildSpeciesList, gen, getSpecies,
   itemKo, abilityKo, makePokemon, speciesKo, toID, learnsetDamagingMoves, LEGAL_ITEMS,
-  speedStat, speedFromSpread, defensiveProfile, TYPE_CHART, ALL_TYPES,
+  speedStat, speedFromSpread, itemSpeedMult, defensiveProfile, TYPE_CHART, ALL_TYPES,
   moveTip, abilityTip, itemTip, natureTip, specialNotes,
   NATURE_KO, TYPE_KO, STAT_KEYS, STAT_KO,
 } from './engine';
@@ -300,7 +300,9 @@ const ALL_ITEMS: Option[] = (() => {
   return list;
 })();
 
-const SCARF_MULT = (item: string, spe: number) => (item === 'choicescarf' ? Math.floor(spe * 1.5) : spe);
+// 소지품 스핏 배율 표시 접미어
+const speedItemSuffix = (item: string) =>
+  item === 'choicescarf' ? ' (스카프)' : item === 'ironball' ? ' (아이언볼)' : '';
 
 export default function App() {
   // 통계 기준: 상위권(1760+) / 전체 래더
@@ -456,14 +458,16 @@ export default function App() {
   // 스피드 시나리오
   const speed = useMemo(() => {
     if (!defender || !oppSpecies) return undefined;
-    const mySpe = SCARF_MULT(my.item, defender.stats.spe);
+    const mySpe = itemSpeedMult(my.item, defender.stats.spe);
+    // 주 컬럼은 상대의 실제 소지품(스카프 ×1.5 / 아이언볼 ×0.5) 반영, 보조 컬럼은 소지품 없는 원본×1.5 가정
     const rows: {label: string; spe: number; scarf: number}[] = [];
     const seen = new Set<string>();
-    const push = (label: string, spe: number) => {
+    const push = (label: string, base: number) => {
+      const spe = itemSpeedMult(oppItem, base);
       const key = `${label}:${spe}`;
       if (seen.has(key)) return;
       seen.add(key);
-      rows.push({label, spe, scarf: Math.floor(spe * 1.5)});
+      rows.push({label, spe, scarf: Math.floor(base * 1.5)});
     };
     try {
       if (oppStats?.spreads[0]) {
@@ -477,8 +481,11 @@ export default function App() {
     } catch { return undefined; }
     rows.sort((a, b) => b.spe - a.spe);
     const scarfPct = oppStats?.items.find(([id]) => id === 'choicescarf')?.[1];
-    return {mySpe, rows, scarfPct};
-  }, [defender, oppSpecies, oppStats, my.item, spreadIdx, oppNature, oppSp]);
+    // 상대가 이미 스카프면 보조 컬럼은 주 컬럼과 같아 불필요 → 숨김
+    const showScarfCol = oppItem !== 'choicescarf';
+    const oppItemNote = oppItem === 'choicescarf' ? '상대 스카프 반영' : oppItem === 'ironball' ? '상대 아이언볼 반영' : '';
+    return {mySpe, rows, scarfPct, showScarfCol, oppItemNote};
+  }, [defender, oppSpecies, oppStats, my.item, oppItem, spreadIdx, oppNature, oppSp]);
 
   const verdict = (opp: number, mine: number) =>
     opp > mine ? {t: '상대 선공', c: 'lose'} : opp < mine ? {t: '내가 선공', c: 'win'} : {t: '동속', c: 'tie'};
@@ -518,8 +525,8 @@ export default function App() {
                   <b className="stat-tag">종족값</b> {STAT_KEYS.map((k) => `${STAT_KO[k]} ${(mySpecies.baseStats as any)[k]}`).join(' · ')}
                 </span>
                 <span className="stat-line">
-                  <b className="stat-tag">실능</b> HP {defender.maxHP()} · 공격 {defender.rawStats.atk} · 방어 {defender.rawStats.def} · 특공 {defender.rawStats.spa} · 특방 {defender.rawStats.spd} · 스핏 {SCARF_MULT(my.item, defender.rawStats.spe)}
-                  {my.item === 'choicescarf' && ' (스카프)'}
+                  <b className="stat-tag">실능</b> HP {defender.maxHP()} · 공격 {defender.rawStats.atk} · 방어 {defender.rawStats.def} · 특공 {defender.rawStats.spa} · 특방 {defender.rawStats.spd} · 스핏 {itemSpeedMult(my.item, defender.rawStats.spe)}
+                  {speedItemSuffix(my.item)}
                 </span>
                 <Matchups types={mySpecies.types} ability={my.ability} />
                 <span className="stat-line dim">
@@ -584,8 +591,8 @@ export default function App() {
                 </span>
                 {oppRealStats && (
                   <span className="stat-line">
-                    <b className="stat-tag">실능</b> HP {oppRealStats.hp} · 공격 {oppRealStats.atk} · 방어 {oppRealStats.def} · 특공 {oppRealStats.spa} · 특방 {oppRealStats.spd} · 스핏 {SCARF_MULT(oppItem, oppRealStats.spe)}
-                    {oppItem === 'choicescarf' && ' (스카프)'}
+                    <b className="stat-tag">실능</b> HP {oppRealStats.hp} · 공격 {oppRealStats.atk} · 방어 {oppRealStats.def} · 특공 {oppRealStats.spa} · 특방 {oppRealStats.spd} · 스핏 {itemSpeedMult(oppItem, oppRealStats.spe)}
+                    {speedItemSuffix(oppItem)}
                   </span>
                 )}
                 <Matchups types={oppSpecies.types} ability={oppAbility} />
@@ -673,10 +680,13 @@ export default function App() {
       {/* 스피드 판정 */}
       {speed && oppSpecies && (
         <section className="card speed-card">
-          <h2>⚡ 스피드 판정 <small>내 스핏 실능 {speed.mySpe}{my.item === 'choicescarf' ? ' (스카프 포함)' : ''}</small></h2>
+          <h2>⚡ 스피드 판정 <small>내 스핏 실능 {speed.mySpe}{speedItemSuffix(my.item)}{speed.oppItemNote ? ` · ${speed.oppItemNote}` : ''}</small></h2>
           <table>
             <thead>
-              <tr><th>상대 가정</th><th>실능</th><th>판정</th><th>스카프면{speed.scarfPct ? ` (채용 ${speed.scarfPct}%)` : ''}</th></tr>
+              <tr>
+                <th>상대 가정</th><th>실능</th><th>판정</th>
+                {speed.showScarfCol && <th>스카프면{speed.scarfPct ? ` (채용 ${speed.scarfPct}%)` : ''}</th>}
+              </tr>
             </thead>
             <tbody>
               {speed.rows.map((r) => {
@@ -687,7 +697,7 @@ export default function App() {
                     <td>{r.label}</td>
                     <td className="num">{r.spe}</td>
                     <td><span className={`chip-v ${v.c}`}>{v.t}</span></td>
-                    <td><span className={`chip-v ${vs.c}`}>{r.scarf} · {vs.t}</span></td>
+                    {speed.showScarfCol && <td><span className={`chip-v ${vs.c}`}>{r.scarf} · {vs.t}</span></td>}
                   </tr>
                 );
               })}

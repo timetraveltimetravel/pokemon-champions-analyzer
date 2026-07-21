@@ -1,0 +1,4 @@
+node_modules/
+dist/
+scripts/.teambuilder-tables.cjs
+tsconfig.tsbuildinfo

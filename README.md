@@ -1,6 +1,7 @@
 # 포켓몬 챔피언스 위협 분석기 — 프로젝트 보고서
 
-> 배포 링크: https://claude.ai/code/artifact/205455d9-4924-49cc-a6e7-ea345b6d8601
+> **공개 웹**: https://timetraveltimetravel.github.io/pokemon-champions-analyzer/
+> 백업(Claude 아티팩트): https://claude.ai/code/artifact/205455d9-4924-49cc-a6e7-ea345b6d8601
 > 로컬 실행: `npm run dev` (localhost:5173)
 
 ## 1. 목적
@@ -55,7 +56,8 @@
 ```bash
 npm run fetch-data       # 최신 통계·로스터·학습셋·패치 갱신
 npm run dev              # 로컬 확인 (파일 감시는 폴링 — OneDrive 대응)
-npm run build-artifact   # dist/artifact.html 생성 → Claude에게 "재배포해줘"
+npm run deploy-pages     # 공개 웹(GitHub Pages) 재배포
+npm run build-artifact   # dist/artifact.html 생성 → Claude 아티팩트 재배포용
 ```
 
 매월 Smogon 통계가 갱신되므로 `fetch-data` → 재배포만 하면 된다. 챔피언스에 포켓몬·기술이 추가돼도 같은 명령으로 자동 반영된다.

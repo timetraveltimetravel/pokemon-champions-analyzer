@@ -1,5 +1,5 @@
 // 계산 엔진: @smogon/calc(젠9) 위에 포켓몬 챔피언스 규칙(SP 육성, 신규 메가)을 얹는 계층
-import {calculate, Generations, Move, Pokemon} from '@smogon/calc';
+import {calculate, Field, Generations, Move, Pokemon} from '@smogon/calc';
 import type {Result} from '@smogon/calc';
 import statsJson from './gen/stats.json';
 import overridesJson from './gen/overrides.json';
@@ -363,12 +363,32 @@ export interface ThreatRow {
 }
 export interface StatusRow { moveName: string; moveKo: string; usagePct: number }
 
+export type Weather = '' | 'Sun' | 'Rain' | 'Sand' | 'Snow';
+export type Terrain = '' | 'Electric' | 'Grassy' | 'Psychic' | 'Misty';
+export interface FieldState { weather: Weather; terrain: Terrain }
+
 export interface ThreatOptions {
   spread: {nature: string; sp: number[]};
   item: string;
   ability: string;
   maxInvest: boolean;   // 공격/특공 32 + 보정 성격 가정
   attackerBoosts?: {atk?: number; spa?: number}; // 공격측 랭크
+  field?: FieldState;   // 날씨·필드
+}
+
+export const WEATHER_KO: Record<Weather, string> = {
+  '': '없음', Sun: '쾌청', Rain: '비', Sand: '모래바람', Snow: '싸라기눈',
+};
+export const TERRAIN_KO: Record<Terrain, string> = {
+  '': '없음', Electric: '일렉트릭필드', Grassy: '그래스필드', Psychic: '사이코필드', Misty: '미스트필드',
+};
+
+function makeField(f?: FieldState): Field | undefined {
+  if (!f || (!f.weather && !f.terrain)) return undefined;
+  return new Field({
+    weather: f.weather || undefined,
+    terrain: f.terrain || undefined,
+  } as any);
 }
 
 function koInfo(result: Result, maxPct: number): {label: string; tone: ThreatRow['koTone']} {
@@ -440,6 +460,7 @@ export function analyzeThreats(
       result = calculate(
         gen, attacker, defender.clone(),
         new Move(gen, move.name, patch ? {overrides: patch as any} : undefined),
+        makeField(o.field),
       );
     } catch {
       continue;

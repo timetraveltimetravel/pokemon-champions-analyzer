@@ -4,6 +4,7 @@ import {
   itemKo, abilityKo, makePokemon, speciesKo, toID, learnsetDamagingMoves, LEGAL_ITEMS,
   speedStat, speedFromSpread, itemSpeedMult, defensiveProfile, TYPE_CHART, ALL_TYPES,
   moveTip, abilityTip, itemTip, natureTip, specialNotes,
+  Weather, Terrain, FieldState, WEATHER_KO, TERRAIN_KO,
   NATURE_KO, TYPE_KO, STAT_KEYS, STAT_KO,
 } from './engine';
 
@@ -332,6 +333,7 @@ export default function App() {
   const [showAllMoves, setShowAllMoves] = useState(false);
   const [myShowAllMoves, setMyShowAllMoves] = useState(false);
   const [ranks, setRanks] = useState({...ZERO_RANKS});
+  const [field, setField] = useState<FieldState>({weather: '', terrain: ''});
   const [guideOpen, setGuideOpen] = useState(false);
   const setRank = (k: keyof typeof ZERO_RANKS) => (v: number) => setRanks((r) => ({...r, [k]: v}));
 
@@ -428,9 +430,10 @@ export default function App() {
         ability: oppAbility,
         maxInvest,
         attackerBoosts: {atk: ranks.oppAtk, spa: ranks.oppSpa},
+        field,
       });
     } catch (e) { console.error(e); return undefined; }
-  }, [defender, oppSpecies, oppStats, oppSpread, oppItem, oppAbility, maxInvest, showAllMoves, ranks.oppAtk, ranks.oppSpa]);
+  }, [defender, oppSpecies, oppStats, oppSpread, oppItem, oppAbility, maxInvest, showAllMoves, ranks.oppAtk, ranks.oppSpa, field]);
 
   // 주는 데미지: 나 → 상대
   const outgoing = useMemo(() => {
@@ -442,9 +445,10 @@ export default function App() {
         ability: my.ability,
         maxInvest: false,
         attackerBoosts: {atk: ranks.myAtk, spa: ranks.mySpa},
+        field,
       });
     } catch (e) { console.error(e); return undefined; }
-  }, [oppDefender, mySpecies, myStats, my, myShowAllMoves, ranks.myAtk, ranks.mySpa]);
+  }, [oppDefender, mySpecies, myStats, my, myShowAllMoves, ranks.myAtk, ranks.mySpa, field]);
 
   // 상대 실능 (가정 스프레드 기준, 랭크 미적용 표시용)
   const oppRealStats = useMemo(() => {
@@ -677,6 +681,29 @@ export default function App() {
         </div>
       </div>
 
+      {/* 날씨·필드 (양쪽 데미지에 공통 적용) */}
+      {oppSpecies && mySpecies && (
+        <div className="field-bar">
+          <span className="field-title">🌦️ 필드 상태</span>
+          <label>날씨
+            <select value={field.weather} onChange={(e) => setField({...field, weather: e.target.value as Weather})}
+              className={field.weather ? 'on' : ''}>
+              {(Object.keys(WEATHER_KO) as Weather[]).map((w) => <option key={w} value={w}>{WEATHER_KO[w]}</option>)}
+            </select>
+          </label>
+          <label>필드
+            <select value={field.terrain} onChange={(e) => setField({...field, terrain: e.target.value as Terrain})}
+              className={field.terrain ? 'on' : ''}>
+              {(Object.keys(TERRAIN_KO) as Terrain[]).map((t) => <option key={t} value={t}>{TERRAIN_KO[t]}</option>)}
+            </select>
+          </label>
+          {(field.weather || field.terrain) && (
+            <button className="field-reset" onClick={() => setField({weather: '', terrain: ''})}>초기화</button>
+          )}
+          <span className="field-hint">필드는 땅에 있는 포켓몬에게만 적용됩니다</span>
+        </div>
+      )}
+
       {/* 스피드 판정 */}
       {speed && oppSpecies && (
         <section className="card speed-card">
@@ -744,7 +771,7 @@ export default function App() {
           </div>
           <ThreatTable rows={outgoing.rows} />
           <p className="fineprint">
-            연속기는 계산기 기본 타수 가정 · 킬가르도/어써러셔는 공격 폼(블레이드/마이티) 기준 ·
+            연속기는 계산기 기본 타수 가정 · 킬가르도/돌핀맨은 공격 폼(블레이드/마이티) 기준 ·
             챔피언스 기술 밸런스 패치 반영 · SP는 공식 변환으로 본가 계산식과 실능 1:1 일치 ·
             데이터: Smogon {STATS.info.month} / Showdown / PokeAPI
           </p>

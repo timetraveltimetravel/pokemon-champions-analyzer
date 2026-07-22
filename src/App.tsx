@@ -4,7 +4,7 @@ import {
   itemKo, abilityKo, makePokemon, speciesKo, toID, learnsetDamagingMoves, LEGAL_ITEMS,
   speedStat, speedFromSpread, itemSpeedMult, defensiveProfile, TYPE_CHART, ALL_TYPES,
   moveTip, abilityTip, itemTip, natureTip, specialNotes,
-  Weather, Terrain, FieldState, WEATHER_KO, TERRAIN_KO,
+  Weather, Terrain, FieldState, WEATHER_KO, TERRAIN_KO, AUTO_WEATHER, AUTO_TERRAIN,
   NATURE_KO, TYPE_KO, STAT_KEYS, STAT_KO,
 } from './engine';
 
@@ -301,6 +301,9 @@ const ALL_ITEMS: Option[] = (() => {
   return list;
 })();
 
+const WEATHER_ICON: Record<Weather, string> = {'': '', Sun: '☀️', Rain: '🌧️', Sand: '🌪️', Snow: '❄️'};
+const TERRAIN_ICON: Record<Terrain, string> = {'': '', Electric: '⚡', Grassy: '🌿', Psychic: '🔮', Misty: '🧚'};
+
 // 소지품 스핏 배율 표시 접미어
 const speedItemSuffix = (item: string) =>
   item === 'choicescarf' ? ' (스카프)' : item === 'ironball' ? ' (아이언볼)' : '';
@@ -334,6 +337,7 @@ export default function App() {
   const [myShowAllMoves, setMyShowAllMoves] = useState(false);
   const [ranks, setRanks] = useState({...ZERO_RANKS});
   const [field, setField] = useState<FieldState>({weather: '', terrain: ''});
+  const [fieldManual, setFieldManual] = useState(false); // 사용자가 직접 만지면 자동 적용 중단
   const [guideOpen, setGuideOpen] = useState(false);
   const setRank = (k: keyof typeof ZERO_RANKS) => (v: number) => setRanks((r) => ({...r, [k]: v}));
 
@@ -350,6 +354,7 @@ export default function App() {
     setMy(stat ? topSpreadConfig(stat, ability) : {...DEFAULT_MY, sp: DEFAULT_MY.sp.slice(), ability});
     setMyShowAllMoves(false);
     setRanks({...ZERO_RANKS});
+    setFieldManual(false); // 새 포켓몬이면 자동 날씨 다시 판정
   };
   const pickOpp = (name: string, map = statsByName) => {
     setOppName(name);
@@ -368,6 +373,7 @@ export default function App() {
         : getSpecies(name)?.abilities[0] ?? '',
     );
     setRanks({...ZERO_RANKS});
+    setFieldManual(false); // 새 포켓몬이면 자동 날씨 다시 판정
   };
 
   // 상대 가정 스프레드 (통계 선택 또는 직접 입력)
@@ -397,6 +403,31 @@ export default function App() {
     }
     setSpreadIdx(idx);
   };
+
+  // 등장 특성으로 자동으로 깔리는 날씨/필드 감지 (내 쪽 우선, 없으면 상대 쪽)
+  // deps는 반드시 원시값만 — 객체를 넣으면 매 렌더 새 참조가 되어 무한 갱신됨
+  const autoField = useMemo(() => {
+    const sides: {ability: string; who: string}[] = [];
+    if (my.ability && myName) sides.push({ability: my.ability, who: getSpecies(myName)?.ko ?? myName});
+    if (oppAbility && oppName) sides.push({ability: oppAbility, who: getSpecies(oppName)?.ko ?? oppName});
+    let weather: {v: Weather; ability: string; who: string} | undefined;
+    let terrain: {v: Terrain; ability: string; who: string} | undefined;
+    for (const s of sides) {
+      if (!weather && AUTO_WEATHER[s.ability]) weather = {v: AUTO_WEATHER[s.ability], ...s};
+      if (!terrain && AUTO_TERRAIN[s.ability]) terrain = {v: AUTO_TERRAIN[s.ability], ...s};
+    }
+    return {weather, terrain};
+  }, [my.ability, myName, oppAbility, oppName]);
+
+  // 사용자가 직접 만지기 전까지는 자동 감지 결과를 반영 (deps도 원시값으로 고정)
+  const autoWeather = autoField.weather?.v ?? '';
+  const autoTerrain = autoField.terrain?.v ?? '';
+  useEffect(() => {
+    if (fieldManual) return;
+    setField({weather: autoWeather, terrain: autoTerrain});
+  }, [autoWeather, autoTerrain, fieldManual]);
+
+  const setFieldByUser = (f: FieldState) => { setFieldManual(true); setField(f); };
 
   // 방어측 포켓몬 (받는 데미지용: 내 랭크 방어/특방 반영)
   const defender = useMemo(() => {
@@ -681,24 +712,41 @@ export default function App() {
         </div>
       </div>
 
+      {/* 특성으로 자동 적용된 날씨·필드 안내 (크게 표시) */}
+      {oppSpecies && mySpecies && !fieldManual && (autoField.weather || autoField.terrain) && (
+        <div className="auto-field">
+          <span className="af-icon">{autoField.weather ? WEATHER_ICON[autoField.weather.v] : TERRAIN_ICON[autoField.terrain!.v]}</span>
+          <span className="af-text">
+            <b>{autoField.weather ? WEATHER_KO[autoField.weather.v] : TERRAIN_KO[autoField.terrain!.v]}</b> 자동 적용됨
+            <em>
+              {(autoField.weather ?? autoField.terrain)!.who}의 특성 「{abilityKo((autoField.weather ?? autoField.terrain)!.ability)}」 — 아래 데미지에 반영 중
+            </em>
+          </span>
+          <button className="af-off" onClick={() => setFieldByUser({weather: '', terrain: ''})}>끄기</button>
+        </div>
+      )}
+
       {/* 날씨·필드 (양쪽 데미지에 공통 적용) */}
       {oppSpecies && mySpecies && (
         <div className="field-bar">
           <span className="field-title">🌦️ 필드 상태</span>
           <label>날씨
-            <select value={field.weather} onChange={(e) => setField({...field, weather: e.target.value as Weather})}
+            <select value={field.weather} onChange={(e) => setFieldByUser({...field, weather: e.target.value as Weather})}
               className={field.weather ? 'on' : ''}>
               {(Object.keys(WEATHER_KO) as Weather[]).map((w) => <option key={w} value={w}>{WEATHER_KO[w]}</option>)}
             </select>
           </label>
           <label>필드
-            <select value={field.terrain} onChange={(e) => setField({...field, terrain: e.target.value as Terrain})}
+            <select value={field.terrain} onChange={(e) => setFieldByUser({...field, terrain: e.target.value as Terrain})}
               className={field.terrain ? 'on' : ''}>
               {(Object.keys(TERRAIN_KO) as Terrain[]).map((t) => <option key={t} value={t}>{TERRAIN_KO[t]}</option>)}
             </select>
           </label>
           {(field.weather || field.terrain) && (
-            <button className="field-reset" onClick={() => setField({weather: '', terrain: ''})}>초기화</button>
+            <button className="field-reset" onClick={() => setFieldByUser({weather: '', terrain: ''})}>초기화</button>
+          )}
+          {fieldManual && (autoField.weather || autoField.terrain) && (
+            <button className="field-reset" onClick={() => setFieldManual(false)}>특성 자동값 복원</button>
           )}
           <span className="field-hint">필드는 땅에 있는 포켓몬에게만 적용됩니다</span>
         </div>

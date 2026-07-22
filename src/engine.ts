@@ -379,6 +379,24 @@ export interface ThreatOptions {
 export const WEATHER_KO: Record<Weather, string> = {
   '': '없음', Sun: '쾌청', Rain: '비', Sand: '모래바람', Snow: '싸라기눈',
 };
+
+// 등장만으로 날씨/필드를 까는 특성 (실전과 동일하게 자동 적용)
+export const AUTO_WEATHER: Record<string, Weather> = {
+  'Sand Stream': 'Sand',
+  'Drizzle': 'Rain',
+  'Drought': 'Sun',
+  'Snow Warning': 'Snow',
+  'Orichalcum Pulse': 'Sun',
+  'Desolate Land': 'Sun',
+  'Primordial Sea': 'Rain',
+};
+export const AUTO_TERRAIN: Record<string, Terrain> = {
+  'Electric Surge': 'Electric',
+  'Grassy Surge': 'Grassy',
+  'Psychic Surge': 'Psychic',
+  'Misty Surge': 'Misty',
+  'Hadron Engine': 'Electric',
+};
 export const TERRAIN_KO: Record<Terrain, string> = {
   '': '없음', Electric: '일렉트릭필드', Grassy: '그래스필드', Psychic: '사이코필드', Misty: '미스트필드',
 };

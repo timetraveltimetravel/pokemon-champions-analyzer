@@ -42,9 +42,25 @@ details[open] summary { margin-bottom: 8px; }
 .chip-v.lose { background: #ff5b5b26; color: #ff8080; }
 .chip-v.tie { background: #ffc44d26; color: #ffd27e; }
 
+.controls {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin-bottom: 14px;
+  padding: 10px 12px; background: #131b2b; border: 1px solid var(--line); border-radius: 10px;
+}
+.ctrl-group { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.ctrl-group + .ctrl-group { padding-left: 16px; border-left: 1px solid var(--line); }
+.ctrl-label {
+  font-size: 0.7rem; font-weight: 800; color: var(--dim);
+  text-transform: uppercase; letter-spacing: 0.04em;
+}
+.sort-group { margin-left: auto; }
 .ranks { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 12px; }
 .ranks-label { font-size: 0.8rem; color: var(--dim); font-weight: 700; }
 .rank { display: flex; align-items: center; gap: 5px; font-size: 0.8rem; color: var(--dim); }
+.status-sel select.on { color: #ffb45b; border-color: #b5762f; font-weight: 700; }
+@media (max-width: 640px) {
+  .ctrl-group + .ctrl-group { padding-left: 0; border-left: none; }
+  .sort-group { margin-left: 0; }
+}
 .rank select {
   padding: 4px 6px; border-radius: 6px; border: 1px solid var(--line);
   background: #101828; color: var(--text); font-size: 0.85rem; font-weight: 700;
@@ -239,6 +255,12 @@ tr.immune .bar i { background: #3a4358; }
 .ko.roll2 { background: #d3d95b26; color: #e0e58a; }
 .ko.safe { background: #3f8f5a26; color: #7fd49c; }
 .ko.immune { background: #3a435866; color: var(--dim); }
+.ko.status { background: #6b5a8c33; color: #c3aef0; }
+
+/* 변화기 행: 살짝 어둡게 구분 */
+.threat tr.status { background: #ffffff05; }
+.threat tr.status .dmg .dash { color: var(--dim); }
+.threat .col-cat, .threat .col-use { white-space: nowrap; }
 
 .status-moves { margin-top: 16px; }
 .status-moves h3 { font-size: 0.9rem; color: var(--dim); margin-bottom: 8px; }

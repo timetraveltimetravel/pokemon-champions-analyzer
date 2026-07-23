@@ -198,6 +198,20 @@ console.log('\n=== E. 도구 ===');
   checkRatio('돌격조끼: 특수 데미지 ×0.67', dmg(prim, chomp, 'Surf'), dmg(prim, chompAV, 'Surf'), 0.667);
 }
 
+console.log('\n=== E2. 상태이상 ===');
+{
+  const chomp = mk('Garchomp', {nature: 'Jolly', evs: evs([2, 32, 0, 0, 0, 32])});
+  const def = mk('Garchomp', {level: 50});
+  const phN = mk('Garchomp', {nature: 'Jolly', evs: evs([2, 32, 0, 0, 0, 32])});
+  const phB = mk('Garchomp', {nature: 'Jolly', evs: evs([2, 32, 0, 0, 0, 32]), status: 'brn'});
+  checkRatio('화상: 물리 데미지 ×0.5', dmg(phN, def, 'Earthquake'), dmg(phB, def, 'Earthquake'), 0.5);
+  const prim = mk('Primarina', {nature: 'Modest', evs: evs([0, 0, 0, 32, 0, 0])});
+  const primB = mk('Primarina', {nature: 'Modest', evs: evs([0, 0, 0, 32, 0, 0]), status: 'brn'});
+  const same = dmg(prim, def, 'Surf').join() === dmg(primB, def, 'Surf').join();
+  same ? pass++ : fail++;
+  console.log(`${same ? '✅' : '❌'} 화상: 특수 데미지는 불변`);
+}
+
 console.log('\n=== F. 표시(%) 계산 ===');
 {
   const a = mk('Garchomp', {nature: 'Jolly', evs: evs([2, 32, 0, 0, 0, 32])});

@@ -165,12 +165,22 @@ export function spArrayToEvs(sp: number[]) {
   return evs as {hp: number; atk: number; def: number; spa: number; spd: number; spe: number};
 }
 
+// 상태이상 (계산 반영: 화상=물리 절반, 마비=스핏 절반)
+export type Status = '' | 'brn' | 'par' | 'psn' | 'tox' | 'slp' | 'frz';
+export const STATUS_KO: Record<Status, string> = {
+  '': '없음', brn: '화상', par: '마비', psn: '독', tox: '맹독', slp: '잠듦', frz: '얼음',
+};
+export const STATUS_EFFECT: Record<Status, string> = {
+  '': '', brn: '물리 공격 데미지 ½', par: '스핏 실능 ½', psn: '', tox: '', slp: '', frz: '',
+};
+
 export interface BuildOptions {
   nature: string;
   sp: number[];             // SP 6개 (0~32)
   ability?: string;
   item?: string;            // Showdown item id 또는 'nothing'
   boosts?: Partial<Record<StatKey, number>>; // 랭크 업/다운 (-6 ~ +6)
+  status?: Status;
 }
 
 export function makePokemon(name: string, o: BuildOptions): Pokemon {
@@ -185,6 +195,7 @@ export function makePokemon(name: string, o: BuildOptions): Pokemon {
     ability: o.ability as any,
     item: item as any,
     boosts: (o.boosts ?? {}) as any,
+    status: (o.status || undefined) as any,
   };
   if (ov) {
     const baseName = gen.species.get(toID(ov.baseSpecies) as any) ? ov.baseSpecies : 'Mew';
@@ -353,15 +364,14 @@ export interface ThreatRow {
   moveName: string;
   moveKo: string;
   type: string;
-  category: 'Physical' | 'Special';
+  category: 'Physical' | 'Special' | 'Status';
   usagePct: number;
   minPct: number;
   maxPct: number;
   koLabel: string;
-  koTone: 'ohko' | 'roll1' | 'twohko' | 'roll2' | 'safe' | 'immune';
+  koTone: 'ohko' | 'roll1' | 'twohko' | 'roll2' | 'safe' | 'immune' | 'status';
   desc: string;
 }
-export interface StatusRow { moveName: string; moveKo: string; usagePct: number }
 
 export type Weather = '' | 'Sun' | 'Rain' | 'Sand' | 'Snow';
 export type Terrain = '' | 'Electric' | 'Grassy' | 'Psychic' | 'Misty';
@@ -373,7 +383,9 @@ export interface ThreatOptions {
   ability: string;
   maxInvest: boolean;   // 공격/특공 32 + 보정 성격 가정
   attackerBoosts?: {atk?: number; spa?: number}; // 공격측 랭크
+  attackerStatus?: Status; // 공격측 상태이상 (화상 등)
   field?: FieldState;   // 날씨·필드
+  sortBy?: 'usage' | 'damage'; // 표 정렬 기준 (기본: 채용률)
 }
 
 export const WEATHER_KO: Record<Weather, string> = {
@@ -445,11 +457,10 @@ export function analyzeThreats(
   attackerName: string,
   moves: [string, number][],
   o: ThreatOptions,
-): {rows: ThreatRow[]; status: StatusRow[]} {
+): {rows: ThreatRow[]} {
   const atkForme = ATTACK_FORME[toID(attackerName)];
   if (atkForme && getSpecies(atkForme)) attackerName = atkForme;
   const rows: ThreatRow[] = [];
-  const status: StatusRow[] = [];
   for (const [mid, usagePct] of moves) {
     if (!mid || mid === 'nothing') continue;
     const move = gen.moves.get(mid as any);
@@ -458,7 +469,12 @@ export function analyzeThreats(
     const category = (patch?.category ?? move.category) as typeof move.category;
     const type = patch?.type ?? move.type;
     if (category === 'Status' || !category) {
-      status.push({moveName: move.name, moveKo: moveKo(move.name), usagePct});
+      // 변화 기술: 공격기와 같은 표에 채용률 순으로 함께 표시
+      rows.push({
+        moveName: move.name, moveKo: moveKo(move.name), type,
+        category: 'Status', usagePct, minPct: 0, maxPct: 0,
+        koLabel: '변화기', koTone: 'status', desc: '',
+      });
       continue;
     }
     // 풀보정 가정 시 기술 분류에 맞는 성격/SP로 재구성
@@ -471,7 +487,7 @@ export function analyzeThreats(
       sp[3] = category === 'Special' ? 32 : sp[3];
     }
     const attacker = makePokemon(attackerName, {
-      nature, sp, ability: o.ability, item: o.item, boosts: o.attackerBoosts,
+      nature, sp, ability: o.ability, item: o.item, boosts: o.attackerBoosts, status: o.attackerStatus,
     });
     let result: Result;
     try {
@@ -503,7 +519,14 @@ export function analyzeThreats(
       desc,
     });
   }
-  rows.sort((a, b) => b.maxPct - a.maxPct || b.usagePct - a.usagePct);
-  status.sort((a, b) => b.usagePct - a.usagePct);
-  return {rows, status};
+  // 채용률순(기본): 통계 채용률 내림차순 → 데미지 내림차순 (변화기도 채용률 위치에 섞임)
+  // 데미지순: 데미지 내림차순 → 채용률, 변화기는 맨 뒤
+  if (o.sortBy === 'damage') {
+    rows.sort((a, b) =>
+      (b.category === 'Status' ? -1 : 1) - (a.category === 'Status' ? -1 : 1) ||
+      b.maxPct - a.maxPct || b.usagePct - a.usagePct);
+  } else {
+    rows.sort((a, b) => b.usagePct - a.usagePct || b.maxPct - a.maxPct);
+  }
+  return {rows};
 }

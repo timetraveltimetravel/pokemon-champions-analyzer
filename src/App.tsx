@@ -5,6 +5,7 @@ import {
   speedStat, speedFromSpread, itemSpeedMult, defensiveProfile, TYPE_CHART, ALL_TYPES,
   moveTip, abilityTip, itemTip, natureTip, specialNotes,
   Weather, Terrain, FieldState, WEATHER_KO, TERRAIN_KO, AUTO_WEATHER, AUTO_TERRAIN,
+  Status, STATUS_KO, STATUS_EFFECT,
   NATURE_KO, TYPE_KO, STAT_KEYS, STAT_KO,
 } from './engine';
 
@@ -143,6 +144,34 @@ function RankSelect({label, value, onChange}: {label: string; value: number; onC
   );
 }
 
+// 상태이상 셀렉터
+function StatusSelect({label, value, onChange}: {label: string; value: Status; onChange: (v: Status) => void}) {
+  return (
+    <label className="rank status-sel">
+      {label}
+      <select value={value} onChange={(e) => onChange(e.target.value as Status)}
+        className={value ? 'on' : ''} title={STATUS_EFFECT[value]}>
+        {(Object.keys(STATUS_KO) as Status[]).map((s) => (
+          <option key={s} value={s}>{STATUS_KO[s]}{STATUS_EFFECT[s] ? ` (${STATUS_EFFECT[s]})` : ''}</option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+// 정렬 토글
+function SortToggle({sortBy, setSortBy}: {sortBy: 'usage' | 'damage'; setSortBy: (s: 'usage' | 'damage') => void}) {
+  return (
+    <div className="ctrl-group sort-group">
+      <span className="ctrl-label">정렬</span>
+      <span className="cut-toggle">
+        <button className={sortBy === 'usage' ? 'on' : ''} onClick={() => setSortBy('usage')}>채용률순</button>
+        <button className={sortBy === 'damage' ? 'on' : ''} onClick={() => setSortBy('damage')}>데미지순</button>
+      </span>
+    </div>
+  );
+}
+
 // SP 6개 입력 그리드
 function SpGrid({sp, onChange}: {sp: number[]; onChange: (sp: number[]) => void}) {
   const total = sp.reduce((a, b) => a + b, 0);
@@ -165,28 +194,33 @@ function SpGrid({sp, onChange}: {sp: number[]; onChange: (sp: number[]) => void}
   );
 }
 
-// 위협 테이블 (양방향 공용)
+// 위협 테이블 (양방향 공용) — 공격기·변화기를 한 표에 채용률/데미지 순으로 표시
 function ThreatTable({rows}: {rows: ThreatRow[]}) {
-  if (rows.length === 0) return <p>표시할 공격기가 없습니다.</p>;
+  if (rows.length === 0) return <p className="empty-mini">표시할 기술이 없습니다.</p>;
   return (
-    <table>
+    <table className="threat">
       <thead>
-        <tr><th>기술</th><th>타입</th><th>분류</th><th>채용률</th><th>데미지</th><th>판정</th></tr>
+        <tr><th>기술</th><th>타입</th><th className="col-cat">분류</th><th className="col-use">채용</th><th>데미지</th><th>판정</th></tr>
       </thead>
       <tbody>
-        {rows.map((r) => (
-          <tr key={r.moveName} className={r.koTone}>
-            <td><Tip tip={moveTip(r.moveName)}><b>{r.moveKo}</b></Tip><small>{r.moveName}</small></td>
-            <td><TypeBadge t={r.type} /></td>
-            <td>{r.category === 'Physical' ? '물리' : '특수'}</td>
-            <td>{r.usagePct > 0 ? `${r.usagePct.toFixed(1)}%` : '—'}</td>
-            <td className="dmg">
-              <div className="bar"><i style={{width: `${Math.min(100, r.maxPct)}%`}} /></div>
-              <span>{r.minPct.toFixed(1)}% ~ {r.maxPct.toFixed(1)}%</span>
-            </td>
-            <td><span className={`ko ${r.koTone}`}>{r.koLabel}</span></td>
-          </tr>
-        ))}
+        {rows.map((r) => {
+          const isStatus = r.category === 'Status';
+          return (
+            <tr key={r.moveName} className={r.koTone}>
+              <td><Tip tip={moveTip(r.moveName)}><b>{r.moveKo}</b></Tip><small>{r.moveName}</small></td>
+              <td><TypeBadge t={r.type} /></td>
+              <td className="col-cat">{isStatus ? '변화' : r.category === 'Physical' ? '물리' : '특수'}</td>
+              <td className="col-use">{r.usagePct > 0 ? `${r.usagePct.toFixed(1)}%` : '—'}</td>
+              <td className="dmg">
+                {isStatus ? <span className="dash">—</span> : <>
+                  <div className="bar"><i style={{width: `${Math.min(100, r.maxPct)}%`}} /></div>
+                  <span>{r.minPct.toFixed(1)}% ~ {r.maxPct.toFixed(1)}%</span>
+                </>}
+              </td>
+              <td><span className={`ko ${r.koTone}`}>{r.koLabel}</span></td>
+            </tr>
+          );
+        })}
       </tbody>
     </table>
   );
@@ -338,6 +372,9 @@ export default function App() {
   const [ranks, setRanks] = useState({...ZERO_RANKS});
   const [field, setField] = useState<FieldState>({weather: '', terrain: ''});
   const [fieldManual, setFieldManual] = useState(false); // 사용자가 직접 만지면 자동 적용 중단
+  const [myStatus, setMyStatus] = useState<Status>('');
+  const [oppStatus, setOppStatus] = useState<Status>('');
+  const [sortBy, setSortBy] = useState<'usage' | 'damage'>('usage');
   const [guideOpen, setGuideOpen] = useState(false);
   const setRank = (k: keyof typeof ZERO_RANKS) => (v: number) => setRanks((r) => ({...r, [k]: v}));
 
@@ -354,6 +391,7 @@ export default function App() {
     setMy(stat ? topSpreadConfig(stat, ability) : {...DEFAULT_MY, sp: DEFAULT_MY.sp.slice(), ability});
     setMyShowAllMoves(false);
     setRanks({...ZERO_RANKS});
+    setMyStatus('');
     setFieldManual(false); // 새 포켓몬이면 자동 날씨 다시 판정
   };
   const pickOpp = (name: string, map = statsByName) => {
@@ -373,6 +411,7 @@ export default function App() {
         : getSpecies(name)?.abilities[0] ?? '',
     );
     setRanks({...ZERO_RANKS});
+    setOppStatus('');
     setFieldManual(false); // 새 포켓몬이면 자동 날씨 다시 판정
   };
 
@@ -435,10 +474,10 @@ export default function App() {
     try {
       return makePokemon(mySpecies.name, {
         nature: my.nature, sp: my.sp, ability: my.ability || undefined, item: my.item,
-        boosts: {def: ranks.myDef, spd: ranks.mySpd},
+        boosts: {def: ranks.myDef, spd: ranks.mySpd}, status: myStatus,
       });
     } catch { return undefined; }
-  }, [mySpecies, my, ranks.myDef, ranks.mySpd]);
+  }, [mySpecies, my, ranks.myDef, ranks.mySpd, myStatus]);
 
   // 상대를 방어측으로 (주는 데미지용: 상대 가정 스프레드 + 상대 랭크)
   const oppDefender = useMemo(() => {
@@ -446,10 +485,10 @@ export default function App() {
     try {
       return makePokemon(oppSpecies.name, {
         nature: oppSpread[0], sp: oppSpread[1], ability: oppAbility || undefined, item: oppItem,
-        boosts: {def: ranks.oppDef, spd: ranks.oppSpd},
+        boosts: {def: ranks.oppDef, spd: ranks.oppSpd}, status: oppStatus,
       });
     } catch { return undefined; }
-  }, [oppSpecies, oppSpread, oppAbility, oppItem, ranks.oppDef, ranks.oppSpd]);
+  }, [oppSpecies, oppSpread, oppAbility, oppItem, ranks.oppDef, ranks.oppSpd, oppStatus]);
 
   // 받는 데미지: 상대 → 나
   const incoming = useMemo(() => {
@@ -461,10 +500,11 @@ export default function App() {
         ability: oppAbility,
         maxInvest,
         attackerBoosts: {atk: ranks.oppAtk, spa: ranks.oppSpa},
-        field,
+        attackerStatus: oppStatus,
+        field, sortBy,
       });
     } catch (e) { console.error(e); return undefined; }
-  }, [defender, oppSpecies, oppStats, oppSpread, oppItem, oppAbility, maxInvest, showAllMoves, ranks.oppAtk, ranks.oppSpa, field]);
+  }, [defender, oppSpecies, oppStats, oppSpread, oppItem, oppAbility, maxInvest, showAllMoves, ranks.oppAtk, ranks.oppSpa, oppStatus, field, sortBy]);
 
   // 주는 데미지: 나 → 상대
   const outgoing = useMemo(() => {
@@ -476,10 +516,11 @@ export default function App() {
         ability: my.ability,
         maxInvest: false,
         attackerBoosts: {atk: ranks.myAtk, spa: ranks.mySpa},
-        field,
+        attackerStatus: myStatus,
+        field, sortBy,
       });
     } catch (e) { console.error(e); return undefined; }
-  }, [oppDefender, mySpecies, myStats, my, myShowAllMoves, ranks.myAtk, ranks.mySpa, field]);
+  }, [oppDefender, mySpecies, myStats, my, myShowAllMoves, ranks.myAtk, ranks.mySpa, myStatus, field, sortBy]);
 
   // 상대 실능 (가정 스프레드 기준, 랭크 미적용 표시용)
   const oppRealStats = useMemo(() => {
@@ -493,16 +534,17 @@ export default function App() {
   // 스피드 시나리오
   const speed = useMemo(() => {
     if (!defender || !oppSpecies) return undefined;
-    const mySpe = itemSpeedMult(my.item, defender.stats.spe);
-    // 주 컬럼은 상대의 실제 소지품(스카프 ×1.5 / 아이언볼 ×0.5) 반영, 보조 컬럼은 소지품 없는 원본×1.5 가정
+    const par = (s: Status, v: number) => (s === 'par' ? Math.floor(v * 0.5) : v); // 마비 스핏 ½
+    const mySpe = par(myStatus, itemSpeedMult(my.item, defender.stats.spe));
+    // 주 컬럼은 상대의 실제 소지품(스카프 ×1.5 / 아이언볼 ×0.5)·마비 반영, 보조 컬럼은 소지품 없는 원본×1.5 가정
     const rows: {label: string; spe: number; scarf: number}[] = [];
     const seen = new Set<string>();
     const push = (label: string, base: number) => {
-      const spe = itemSpeedMult(oppItem, base);
+      const spe = par(oppStatus, itemSpeedMult(oppItem, base));
       const key = `${label}:${spe}`;
       if (seen.has(key)) return;
       seen.add(key);
-      rows.push({label, spe, scarf: Math.floor(base * 1.5)});
+      rows.push({label, spe, scarf: par(oppStatus, Math.floor(base * 1.5))});
     };
     try {
       if (oppStats?.spreads[0]) {
@@ -518,9 +560,12 @@ export default function App() {
     const scarfPct = oppStats?.items.find(([id]) => id === 'choicescarf')?.[1];
     // 상대가 이미 스카프면 보조 컬럼은 주 컬럼과 같아 불필요 → 숨김
     const showScarfCol = oppItem !== 'choicescarf';
-    const oppItemNote = oppItem === 'choicescarf' ? '상대 스카프 반영' : oppItem === 'ironball' ? '상대 아이언볼 반영' : '';
-    return {mySpe, rows, scarfPct, showScarfCol, oppItemNote};
-  }, [defender, oppSpecies, oppStats, my.item, oppItem, spreadIdx, oppNature, oppSp]);
+    const notes = [
+      oppItem === 'choicescarf' ? '상대 스카프' : oppItem === 'ironball' ? '상대 아이언볼' : '',
+      oppStatus === 'par' ? '상대 마비' : '', myStatus === 'par' ? '내 마비' : '',
+    ].filter(Boolean).join(' · ');
+    return {mySpe, rows, scarfPct, showScarfCol, oppItemNote: notes};
+  }, [defender, oppSpecies, oppStats, my.item, oppItem, spreadIdx, oppNature, oppSp, myStatus, oppStatus]);
 
   const verdict = (opp: number, mine: number) =>
     opp > mine ? {t: '상대 선공', c: 'lose'} : opp < mine ? {t: '내가 선공', c: 'win'} : {t: '동속', c: 'tie'};
@@ -785,24 +830,22 @@ export default function App() {
       {incoming && oppSpecies && mySpecies && defender && (
         <section className="card">
           <h2>🛡️ 받는 데미지 <small>{oppSpecies.ko} → {mySpecies.ko} (내 HP {defender.maxHP()})</small></h2>
-          <div className="ranks">
-            <span className="ranks-label">랭크:</span>
-            <RankSelect label="상대 공격" value={ranks.oppAtk} onChange={setRank('oppAtk')} />
-            <RankSelect label="상대 특공" value={ranks.oppSpa} onChange={setRank('oppSpa')} />
-            <RankSelect label="내 방어" value={ranks.myDef} onChange={setRank('myDef')} />
-            <RankSelect label="내 특방" value={ranks.mySpd} onChange={setRank('mySpd')} />
+          <div className="controls">
+            <div className="ctrl-group">
+              <span className="ctrl-label">랭크</span>
+              <RankSelect label="상대 공격" value={ranks.oppAtk} onChange={setRank('oppAtk')} />
+              <RankSelect label="상대 특공" value={ranks.oppSpa} onChange={setRank('oppSpa')} />
+              <RankSelect label="내 방어" value={ranks.myDef} onChange={setRank('myDef')} />
+              <RankSelect label="내 특방" value={ranks.mySpd} onChange={setRank('mySpd')} />
+            </div>
+            <div className="ctrl-group">
+              <span className="ctrl-label">상태</span>
+              <StatusSelect label="상대" value={oppStatus} onChange={setOppStatus} />
+              <StatusSelect label="나" value={myStatus} onChange={setMyStatus} />
+            </div>
+            <SortToggle sortBy={sortBy} setSortBy={setSortBy} />
           </div>
           <ThreatTable rows={incoming.rows} />
-          {incoming.status.length > 0 && (
-            <div className="status-moves">
-              <h3>변화 기술</h3>
-              {incoming.status.map((s) => (
-                <Tip key={s.moveName} tip={moveTip(s.moveName)}>
-                  <span className="chip">{s.moveKo} {s.usagePct.toFixed(1)}%</span>
-                </Tip>
-              ))}
-            </div>
-          )}
         </section>
       )}
 
@@ -810,12 +853,20 @@ export default function App() {
       {outgoing && oppSpecies && mySpecies && oppDefender && (
         <section className="card">
           <h2>🗡️ 주는 데미지 <small>{mySpecies.ko} → {oppSpecies.ko} (상대 HP {oppDefender.maxHP()})</small></h2>
-          <div className="ranks">
-            <span className="ranks-label">랭크:</span>
-            <RankSelect label="내 공격" value={ranks.myAtk} onChange={setRank('myAtk')} />
-            <RankSelect label="내 특공" value={ranks.mySpa} onChange={setRank('mySpa')} />
-            <RankSelect label="상대 방어" value={ranks.oppDef} onChange={setRank('oppDef')} />
-            <RankSelect label="상대 특방" value={ranks.oppSpd} onChange={setRank('oppSpd')} />
+          <div className="controls">
+            <div className="ctrl-group">
+              <span className="ctrl-label">랭크</span>
+              <RankSelect label="내 공격" value={ranks.myAtk} onChange={setRank('myAtk')} />
+              <RankSelect label="내 특공" value={ranks.mySpa} onChange={setRank('mySpa')} />
+              <RankSelect label="상대 방어" value={ranks.oppDef} onChange={setRank('oppDef')} />
+              <RankSelect label="상대 특방" value={ranks.oppSpd} onChange={setRank('oppSpd')} />
+            </div>
+            <div className="ctrl-group">
+              <span className="ctrl-label">상태</span>
+              <StatusSelect label="나" value={myStatus} onChange={setMyStatus} />
+              <StatusSelect label="상대" value={oppStatus} onChange={setOppStatus} />
+            </div>
+            <SortToggle sortBy={sortBy} setSortBy={setSortBy} />
           </div>
           <ThreatTable rows={outgoing.rows} />
           <p className="fineprint">

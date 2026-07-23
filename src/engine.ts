@@ -165,13 +165,13 @@ export function spArrayToEvs(sp: number[]) {
   return evs as {hp: number; atk: number; def: number; spa: number; spd: number; spe: number};
 }
 
-// 상태이상 (계산 반영: 화상=물리 절반, 마비=스핏 절반)
-export type Status = '' | 'brn' | 'par' | 'psn' | 'tox' | 'slp' | 'frz';
+// 상태이상 (계산에 영향을 주는 화상·마비만 취급)
+export type Status = '' | 'brn' | 'par';
 export const STATUS_KO: Record<Status, string> = {
-  '': '없음', brn: '화상', par: '마비', psn: '독', tox: '맹독', slp: '잠듦', frz: '얼음',
+  '': '없음', brn: '화상', par: '마비',
 };
 export const STATUS_EFFECT: Record<Status, string> = {
-  '': '', brn: '물리 공격 데미지 ½', par: '스핏 실능 ½', psn: '', tox: '', slp: '', frz: '',
+  '': '', brn: '물리 공격 데미지 ½', par: '스핏 실능 ½',
 };
 
 export interface BuildOptions {
@@ -519,14 +519,22 @@ export function analyzeThreats(
       desc,
     });
   }
-  // 채용률순(기본): 통계 채용률 내림차순 → 데미지 내림차순 (변화기도 채용률 위치에 섞임)
-  // 데미지순: 데미지 내림차순 → 채용률, 변화기는 맨 뒤
-  if (o.sortBy === 'damage') {
-    rows.sort((a, b) =>
-      (b.category === 'Status' ? -1 : 1) - (a.category === 'Status' ? -1 : 1) ||
-      b.maxPct - a.maxPct || b.usagePct - a.usagePct);
-  } else {
+  if (o.sortBy === 'usage') {
+    // 채용률순: 공격기·변화기 모두 채용률 내림차순
     rows.sort((a, b) => b.usagePct - a.usagePct || b.maxPct - a.maxPct);
+    return {rows};
   }
-  return {rows};
+  // 기본(데미지순): 공격기는 데미지 내림차순 → 변화기는 채용률 위치에 끼워넣기
+  const attacks = rows.filter((r) => r.category !== 'Status')
+    .sort((a, b) => b.maxPct - a.maxPct || b.usagePct - a.usagePct);
+  const changes = rows.filter((r) => r.category === 'Status')
+    .sort((a, b) => b.usagePct - a.usagePct);
+  const out = attacks.slice();
+  for (const c of changes) {
+    // 이 변화기보다 채용률이 낮은 첫 공격기 앞에 삽입 (자주 쓰는 변화기일수록 위로)
+    let idx = out.findIndex((r) => r.category !== 'Status' && r.usagePct < c.usagePct);
+    if (idx < 0) idx = out.length;
+    out.splice(idx, 0, c);
+  }
+  return {rows: out};
 }

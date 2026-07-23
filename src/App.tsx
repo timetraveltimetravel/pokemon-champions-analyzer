@@ -374,7 +374,7 @@ export default function App() {
   const [fieldManual, setFieldManual] = useState(false); // 사용자가 직접 만지면 자동 적용 중단
   const [myStatus, setMyStatus] = useState<Status>('');
   const [oppStatus, setOppStatus] = useState<Status>('');
-  const [sortBy, setSortBy] = useState<'usage' | 'damage'>('usage');
+  const [sortBy, setSortBy] = useState<'usage' | 'damage'>('damage');
   const [guideOpen, setGuideOpen] = useState(false);
   const setRank = (k: keyof typeof ZERO_RANKS) => (v: number) => setRanks((r) => ({...r, [k]: v}));
 
